@@ -1,12 +1,15 @@
 export default async function handler(req, res) {
-  // 1. Get the original URL path
-  // Vercel puts the path in req.url, e.g., "/v1beta/models/..."
+  // 1. Construct the Google API URL based on the incoming request
+  const googleBase = "https://generativelanguage.googleapis.com";
   
-  // 2. Define the Google Host
-  const googleHost = "https://generativelanguage.googleapis.com";
-  const fullUrl = googleHost + req.url;
+  // We use the 'new URL' object to easily manage query parameters
+  // 'req.url' includes the path and the query string (e.g., /v1beta/models...?key=AIza...)
+  const targetUrl = new URL(googleBase + req.url);
 
-  // 3. Prepare options (method, headers, body)
+  // 2. CRITICAL FIX: Remove the 'path' parameter that Vercel adds
+  targetUrl.searchParams.delete("path");
+  
+  // 3. Set up the fetch options
   const options = {
     method: req.method,
     headers: {
@@ -14,16 +17,17 @@ export default async function handler(req, res) {
     },
   };
 
+  // If there is a body (data), pass it along
   if (req.method === "POST" && req.body) {
     options.body = JSON.stringify(req.body);
   }
 
   try {
-    // 4. Fetch from Google (Running in USA)
-    const response = await fetch(fullUrl, options);
+    // 4. Fetch from Google
+    const response = await fetch(targetUrl.toString(), options);
     const data = await response.json();
 
-    // 5. Return result to you
+    // 5. Return the response to your app
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
