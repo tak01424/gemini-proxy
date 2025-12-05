@@ -1,15 +1,24 @@
 export default async function handler(req, res) {
-  // 1. Construct the Google API URL based on the incoming request
-  const googleBase = "https://generativelanguage.googleapis.com";
-  
-  // We use the 'new URL' object to easily manage query parameters
-  // 'req.url' includes the path and the query string (e.g., /v1beta/models...?key=AIza...)
-  const targetUrl = new URL(googleBase + req.url);
+  // --- 1. HANDLE CORS (The Fix) ---
+  // This tells the browser/app: "It is okay to talk to this server."
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Allow any app to connect
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-goog-api-key');
 
-  // 2. CRITICAL FIX: Remove the 'path' parameter that Vercel adds
-  targetUrl.searchParams.delete("path");
+  // If the app is just asking "Can I connect?" (OPTIONS request), say YES and stop.
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  // --- 2. PREPARE URL ---
+  const googleBase = "https://generativelanguage.googleapis.com";
+  const targetUrl = new URL(googleBase + req.url);
   
-  // 3. Set up the fetch options
+  // Remove Vercel's internal path tracking
+  targetUrl.searchParams.delete("path");
+
+  // --- 3. PREPARE FETCH OPTIONS ---
   const options = {
     method: req.method,
     headers: {
@@ -17,19 +26,25 @@ export default async function handler(req, res) {
     },
   };
 
-  // If there is a body (data), pass it along
+  // Forward the body if it's a POST request
   if (req.method === "POST" && req.body) {
-    options.body = JSON.stringify(req.body);
+    // Vercel parses JSON automatically, so we must stringify it back for Google
+    options.body = typeof req.body === 'object' ? JSON.stringify(req.body) : req.body;
   }
 
   try {
-    // 4. Fetch from Google
+    // --- 4. CALL GOOGLE ---
     const response = await fetch(targetUrl.toString(), options);
+    
+    // Parse the response
     const data = await response.json();
 
-    // 5. Return the response to your app
+    // --- 5. RETURN RESULT ---
+    // Forward the status code from Google (200, 400, 500, etc.)
     res.status(response.status).json(data);
+
   } catch (error) {
+    // Handle server crashes
     res.status(500).json({ error: error.message });
   }
 }
